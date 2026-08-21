@@ -1,39 +1,73 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Database, CandlestickChart, Layers, TrendingUp } from 'lucide-react';
-import { SymbolSelector } from '../components/chart/SymbolSelector';
-import { TimeframeSelector } from '../components/chart/TimeframeSelector';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { ChartToolbar } from '../components/chart/ChartToolbar';
 import { TradingChart } from '../components/chart/TradingChart';
-import { Button } from '../components/ui/Button';
-import { Badge } from '../components/ui/Badge';
+import { IndicatorSearchModal } from '../components/chart/IndicatorSearchModal';
+import { IndicatorSettingsModal } from '../components/chart/IndicatorSettingsModal';
+import { MarketStructureModal } from '../components/chart/MarketStructureModal';
+import { LayoutManagerModal, type ChartLayout } from '../components/chart/LayoutManagerModal';
 import { fetchCandles } from '../services/marketApi';
 import type { Candle } from '../services/marketApi';
-
-
-const SYMBOLS = [
-  { symbol: 'XAUUSD', name: 'Gold / US Dollar' },
-  { symbol: 'EURUSD', name: 'Euro / US Dollar' },
-  { symbol: 'GBPUSD', name: 'British Pound / US Dollar' },
-  { symbol: 'USDJPY', name: 'US Dollar / Yen' },
-  { symbol: 'BTCUSD', name: 'Bitcoin / US Dollar' },
-];
+import type { IndicatorInstance } from '../indicators/indicatorTypes';
+import { getIndicatorById } from '../indicators/IndicatorRegistry';
+import { DEFAULT_STRUCTURE_CONFIG, calculateMarketStructure } from '../market-structure/structureEngine';
+import type { MarketStructureConfig } from '../market-structure/structureTypes';
+import type { DrawingShape, DrawingToolType } from '../drawing/drawingTypes';
 
 export const Charts: React.FC = () => {
   const [symbol, setSymbol] = useState('XAUUSD');
   const [timeframe, setTimeframe] = useState('15min');
+  const [chartType, setChartType] = useState<'candlestick' | 'line' | 'area'>('candlestick');
   const [candles, setCandles] = useState<Candle[]>([]);
-  const [dataSource, setDataSource] = useState<string>('Live Data');
+  const [dataSource, setDataSource] = useState('Twelve Data Live');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Indicators State
+  const [indicators, setIndicators] = useState<IndicatorInstance[]>([
+    {
+      instanceId: 'inst_ema20',
+      indicatorId: 'ema',
+      visible: true,
+      params: { length: 20, source: 'close' },
+      colors: { ema: '#F0883E' },
+      lineWidths: { ema: 2 },
+    },
+    {
+      instanceId: 'inst_ema50',
+      indicatorId: 'ema',
+      visible: true,
+      params: { length: 50, source: 'close' },
+      colors: { ema: '#2F81F7' },
+      lineWidths: { ema: 2 },
+    },
+  ]);
+
+  // Modals state
+  const [isIndicatorSearchOpen, setIsIndicatorSearchOpen] = useState(false);
+  const [editingIndicator, setEditingIndicator] = useState<IndicatorInstance | null>(null);
+  const [isStructureModalOpen, setIsStructureModalOpen] = useState(false);
+  const [isLayoutModalOpen, setIsLayoutModalOpen] = useState(false);
+
+  // Market Structure State
+  const [structureConfig, setStructureConfig] = useState<MarketStructureConfig>(DEFAULT_STRUCTURE_CONFIG);
+  const [structureEnabled, setStructureEnabled] = useState(true);
+
+  // Drawings State
+  const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingToolType>('cursor');
+  const [drawings, setDrawings] = useState<DrawingShape[]>([]);
+
+  // ─── Fetch Real Market Data from Twelve Data Pipeline ─────────
   const loadCandles = useCallback(async (sym: string, tf: string) => {
     setLoading(true);
     setError(null);
     try {
       const data = await fetchCandles(sym, tf, 150);
       setCandles(data.candles || []);
-      if (data.source) setDataSource(data.source);
+      setDataSource(data.source || 'Twelve Data Live');
     } catch (err: any) {
-      setError(err?.message || 'Failed to connect to market data service.');
+      setError(err?.message || `Failed to fetch market data for ${sym} (${tf}).`);
+      setCandles([]);
     } finally {
       setLoading(false);
     }
@@ -43,92 +77,182 @@ export const Charts: React.FC = () => {
     loadCandles(symbol, timeframe);
   }, [symbol, timeframe, loadCandles]);
 
+  // ─── Calculate Market Structure ──────────────────────────────
+  const marketStructure = useMemo(() => {
+    if (!structureEnabled || candles.length === 0) return null;
+    return calculateMarketStructure(candles, structureConfig);
+  }, [candles, structureConfig, structureEnabled]);
+
+  // ─── Indicator Handlers ──────────────────────────────────────
+  const handleAddIndicator = (indicatorId: string) => {
+    const def = getIndicatorById(indicatorId);
+    if (!def) return;
+
+    const defaultParams: Record<string, any> = {};
+    def.params.forEach((p) => {
+      defaultParams[p.key] = p.default;
+    });
+
+    const defaultColors: Record<string, string> = {};
+    def.plots.forEach((p) => {
+      defaultColors[p.id] = p.color;
+    });
+
+    const newInstance: IndicatorInstance = {
+      instanceId: `inst_${indicatorId}_${Date.now()}`,
+      indicatorId,
+      visible: true,
+      params: defaultParams,
+      colors: defaultColors,
+      lineWidths: {},
+    };
+
+    setIndicators((prev) => [...prev, newInstance]);
+  };
+
+  const handleToggleIndicatorVisibility = (instanceId: string) => {
+    setIndicators((prev) =>
+      prev.map((i) => (i.instanceId === instanceId ? { ...i, visible: !i.visible } : i))
+    );
+  };
+
+  const handleRemoveIndicator = (instanceId: string) => {
+    setIndicators((prev) => prev.filter((i) => i.instanceId !== instanceId));
+  };
+
+  const handleUpdateIndicatorInstance = (updated: IndicatorInstance) => {
+    setIndicators((prev) => prev.map((i) => (i.instanceId === updated.instanceId ? updated : i)));
+  };
+
+  // ─── Layout Handlers ─────────────────────────────────────────
+  const handleLoadLayout = (layout: ChartLayout) => {
+    if (layout.symbol) setSymbol(layout.symbol);
+    if (layout.timeframe) setTimeframe(layout.timeframe);
+    if (layout.chartType) setChartType(layout.chartType as any);
+    if (layout.indicators) setIndicators(layout.indicators);
+    if (layout.structureConfig) setStructureConfig(layout.structureConfig);
+    if (layout.drawings) setDrawings(layout.drawings);
+  };
+
+  const handleClearDrawings = () => {
+    if (confirm('Clear all drawings on this chart?')) {
+      setDrawings([]);
+    }
+  };
+
+  const handleResetChart = () => {
+    loadCandles(symbol, timeframe);
+  };
+
+  const handleToggleFullscreen = () => {
+    setIsFullscreen((prev) => !prev);
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 1600 }}>
-      {/* Top Header & Controls */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>
-                Advanced Chart Workspace
-              </h2>
-              <Badge variant="success">
-                <Database size={10} style={{ marginRight: 3 }} /> {dataSource}
-              </Badge>
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-              Real-time multi-asset market charts powered by TradingView Lightweight Charts
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadCandles(symbol, timeframe)}
-            disabled={loading}
-          >
-            <RefreshCw size={13} className={loading ? 'spin' : ''} />
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      {/* Toolbar Controls Bar */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '10px 14px',
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          flexWrap: 'wrap',
-          gap: 12,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          {/* Symbol selector */}
-          <SymbolSelector
-            symbols={SYMBOLS}
-            activeSymbol={symbol}
-            onChange={(s) => setSymbol(s)}
-          />
-
-          <div style={{ width: 1, height: 24, background: 'var(--border)' }} />
-
-          {/* Timeframe selector */}
-          <TimeframeSelector
-            activeTimeframe={timeframe}
-            onChange={(tf) => setTimeframe(tf)}
-          />
-        </div>
-
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button className="btn btn-ghost btn-icon-sm" title="Candlesticks">
-            <CandlestickChart size={14} color="var(--accent)" />
-          </button>
-          <button className="btn btn-ghost btn-icon-sm" title="Line">
-            <TrendingUp size={14} />
-          </button>
-          <button className="btn btn-ghost btn-icon-sm" title="Area">
-            <Layers size={14} />
-          </button>
-        </div>
-      </div>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        maxWidth: 1600,
+        ...(isFullscreen
+          ? {
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99999,
+              background: '#0D1117',
+              padding: 16,
+              maxWidth: '100vw',
+              maxHeight: '100vh',
+              overflow: 'auto',
+            }
+          : {}),
+      }}
+    >
+      {/* Chart Workspace Toolbar */}
+      <ChartToolbar
+        symbol={symbol}
+        onSelectSymbol={(s) => setSymbol(s)}
+        timeframe={timeframe}
+        onSelectTimeframe={(tf) => setTimeframe(tf)}
+        chartType={chartType}
+        onChangeChartType={(t) => setChartType(t)}
+        onOpenIndicators={() => setIsIndicatorSearchOpen(true)}
+        activeIndicatorCount={indicators.filter((i) => i.visible).length}
+        onOpenStructure={() => setIsStructureModalOpen(true)}
+        structureEnabled={structureEnabled}
+        onOpenLayouts={() => setIsLayoutModalOpen(true)}
+        activeDrawingTool={activeDrawingTool}
+        onSelectDrawingTool={(tool) => setActiveDrawingTool(tool)}
+        onClearDrawings={handleClearDrawings}
+        drawingCount={drawings.length}
+        onResetChart={handleResetChart}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={handleToggleFullscreen}
+        loading={loading}
+        dataSource={dataSource}
+      />
 
       {/* Main Chart Component */}
       <TradingChart
         symbol={symbol}
         timeframe={timeframe}
+        chartType={chartType}
         candles={candles}
         loading={loading}
         error={error}
+        dataSource={dataSource}
         onRetry={() => loadCandles(symbol, timeframe)}
-        height={560}
+        height={isFullscreen ? window.innerHeight - 140 : 580}
+        indicators={indicators}
+        onToggleIndicatorVisibility={handleToggleIndicatorVisibility}
+        onOpenIndicatorSettings={(inst) => setEditingIndicator(inst)}
+        onRemoveIndicator={handleRemoveIndicator}
+        marketStructure={marketStructure}
+        activeDrawingTool={activeDrawingTool}
+        drawings={drawings}
+        onDrawingsChange={setDrawings}
+      />
+
+      {/* Indicator Search Modal */}
+      <IndicatorSearchModal
+        isOpen={isIndicatorSearchOpen}
+        onClose={() => setIsIndicatorSearchOpen(false)}
+        activeIndicators={indicators}
+        onAddIndicator={handleAddIndicator}
+        onRemoveIndicator={handleRemoveIndicator}
+      />
+
+      {/* Indicator Settings Modal */}
+      <IndicatorSettingsModal
+        isOpen={editingIndicator !== null}
+        onClose={() => setEditingIndicator(null)}
+        instance={editingIndicator}
+        onUpdateInstance={handleUpdateIndicatorInstance}
+      />
+
+      {/* Market Structure Modal */}
+      <MarketStructureModal
+        isOpen={isStructureModalOpen}
+        onClose={() => setIsStructureModalOpen(false)}
+        config={structureConfig}
+        onUpdateConfig={(c) => {
+          setStructureConfig(c);
+          setStructureEnabled(true);
+        }}
+      />
+
+      {/* Layout Manager Modal */}
+      <LayoutManagerModal
+        isOpen={isLayoutModalOpen}
+        onClose={() => setIsLayoutModalOpen(false)}
+        currentSymbol={symbol}
+        currentTimeframe={timeframe}
+        currentChartType={chartType}
+        currentIndicators={indicators}
+        currentStructureConfig={structureConfig}
+        currentDrawings={drawings}
+        onLoadLayout={handleLoadLayout}
       />
     </div>
   );

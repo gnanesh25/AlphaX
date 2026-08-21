@@ -32,6 +32,10 @@ market_service = MarketDataService()
 def read_root():
     return {"name": "AlphaX Market Data API", "status": "online", "version": "1.0.0"}
 
+@app.get("/api/health")
+def read_health():
+    return {"status": "ok", "provider": "Twelve Data", "cache_entries": len(market_service.cache)}
+
 @app.get("/api/markets")
 def get_markets():
     """List all supported market instruments."""
@@ -44,21 +48,21 @@ async def get_market_quote(symbol: str):
         quote = await market_service.get_quote(symbol)
         return quote
     except Exception as e:
-        logger.error(f"Quote error: {str(e)}")
+        logger.error(f"Quote error for {symbol}: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/market/{symbol}/candles")
 async def get_market_candles(
     symbol: str,
     timeframe: str = Query("15min", description="Candle timeframe (e.g. 1min, 5min, 15min, 30min, 1h, 4h, 1day)"),
-    outputsize: int = Query(100, description="Number of candles to return (max 500)")
+    outputsize: int = Query(150, description="Number of candles to return (max 500)")
 ):
     """Get historical OHLC candle data for chart rendering."""
     try:
         result = await market_service.get_candles(symbol, timeframe, outputsize)
         return result
     except Exception as e:
-        logger.error(f"Candles error: {str(e)}")
+        logger.error(f"Candles error for {symbol} {timeframe}: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
