@@ -1,0 +1,9 @@
+{
+  "name": "alphax-trading-os",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "npm run build --prefix alphax-frontend",
+    "dev": "npm run dev --prefix alphax-frontend"
+  }
+}
