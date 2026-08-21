@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Zap, Eye, EyeOff, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { Zap, Eye, EyeOff, ArrowRight, AlertCircle, Sparkles, ExternalLink } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useAuth, GOOGLE_CLIENT_ID } from '../contexts/AuthContext';
 
@@ -11,7 +11,7 @@ declare global {
 }
 
 export const Login: React.FC = () => {
-  const { signIn, signInWithGoogle, signInWithGoogleToken, signUp } = useAuth();
+  const { signIn, signInWithGoogleToken, signUp } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
@@ -33,7 +33,11 @@ export const Login: React.FC = () => {
         try {
           const { error } = await signInWithGoogleToken(response.credential);
           if (error) {
-            setErrorMsg(error.message);
+            if (error.message.includes('provider is not enabled') || error.message.includes('Unsupported provider')) {
+              setErrorMsg('Google OAuth is not toggled ON in your Supabase Dashboard yet. Follow the 2-step guide below or use Quick Demo Sign-In!');
+            } else {
+              setErrorMsg(error.message);
+            }
           } else {
             navigate('/app/dashboard', { replace: true });
           }
@@ -46,20 +50,24 @@ export const Login: React.FC = () => {
     };
 
     if (window.google?.accounts?.id) {
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse,
-        auto_select: false,
-      });
-
-      if (googleBtnRef.current) {
-        window.google.accounts.id.renderButton(googleBtnRef.current, {
-          theme: 'outline',
-          size: 'large',
-          width: 336,
-          text: 'continue_with',
-          shape: 'rectangular',
+      try {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleCredentialResponse,
+          auto_select: false,
         });
+
+        if (googleBtnRef.current) {
+          window.google.accounts.id.renderButton(googleBtnRef.current, {
+            theme: 'outline',
+            size: 'large',
+            width: 336,
+            text: 'continue_with',
+            shape: 'rectangular',
+          });
+        }
+      } catch (e) {
+        console.error('GIS init error:', e);
       }
     }
   }, [signInWithGoogleToken, navigate]);
@@ -88,23 +96,19 @@ export const Login: React.FC = () => {
     }
   };
 
-  const handleGoogleSignInFallback = async () => {
+  const handleGoogleSignInClick = () => {
     setGoogleLoading(true);
     setErrorMsg(null);
 
-    // Prompt native Google picker if GIS is loaded
     if (window.google?.accounts?.id) {
-      window.google.accounts.id.prompt();
-    }
-
-    try {
-      const { error } = await signInWithGoogle();
-      if (error) {
-        setErrorMsg(error.message);
-      }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Google sign-in failed.');
-    } finally {
+      window.google.accounts.id.prompt((notification: any) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          setErrorMsg('To complete Google Login, please enable the Google Provider toggle in your Supabase Dashboard (Auth > Providers > Google). Or use Quick Demo Sign-In below!');
+          setGoogleLoading(false);
+        }
+      });
+    } else {
+      setErrorMsg('To complete Google Login, please enable the Google Provider toggle in your Supabase Dashboard (Auth > Providers > Google).');
       setGoogleLoading(false);
     }
   };
@@ -206,6 +210,7 @@ export const Login: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               gap: 8,
+              lineHeight: 1.5,
             }}
           >
             <AlertCircle size={15} style={{ flexShrink: 0 }} />
@@ -243,7 +248,7 @@ export const Login: React.FC = () => {
           variant="outline"
           size="md"
           type="button"
-          onClick={handleGoogleSignInFallback}
+          onClick={handleGoogleSignInClick}
           disabled={googleLoading}
           style={{ width: '100%', gap: 10 }}
         >
@@ -255,6 +260,28 @@ export const Login: React.FC = () => {
           </svg>
           {googleLoading ? 'Connecting Google...' : 'Continue with Google'}
         </Button>
+
+        {/* Supabase Provider Setup Quick Link */}
+        <div
+          style={{
+            padding: '10px 12px',
+            background: 'var(--bg-surface2)',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            fontSize: '11px',
+            color: 'var(--text-muted)',
+            lineHeight: 1.5,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 2 }}>
+            <ExternalLink size={12} />
+            Supabase Setup Guide (30 sec)
+          </div>
+          In your open Supabase tab: <strong>Auth &gt; Providers &gt; Google</strong>. Toggle <strong>Enabled</strong> and paste Client ID:
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: 'var(--accent)', marginTop: 4, wordBreak: 'break-all' }}>
+            802792167440-1gkep2fea554tadbt3j89dogrh5mtmu7.apps.googleusercontent.com
+          </div>
+        </div>
 
         {/* Divider */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
