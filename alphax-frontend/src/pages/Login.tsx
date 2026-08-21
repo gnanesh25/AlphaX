@@ -25,9 +25,12 @@ export const Login: React.FC = () => {
   const [gisRendered, setGisRendered] = useState(false);
 
   const googleBtnRef = useRef<HTMLDivElement>(null);
+  const initializedRef = useRef(false);
 
   // Initialize Google Identity Services (GIS)
   useEffect(() => {
+    if (initializedRef.current) return;
+
     const handleCredentialResponse = async (response: any) => {
       if (response && response.credential) {
         setGoogleLoading(true);
@@ -48,6 +51,7 @@ export const Login: React.FC = () => {
     };
 
     const tryInitGIS = () => {
+      if (initializedRef.current) return true;
       if (window.google?.accounts?.id && googleBtnRef.current) {
         try {
           window.google.accounts.id.initialize({
@@ -63,6 +67,7 @@ export const Login: React.FC = () => {
             text: 'continue_with',
             shape: 'rectangular',
           });
+          initializedRef.current = true;
           setGisRendered(true);
           return true;
         } catch (e) {

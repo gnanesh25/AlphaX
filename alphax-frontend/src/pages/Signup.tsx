@@ -12,7 +12,7 @@ const FEATURES = [
 ];
 
 export const Signup: React.FC = () => {
-  const { signUp } = useAuth();
+  const { signUp, signIn } = useAuth();
   const navigate = useNavigate();
 
   const [name, setName] = useState('');
@@ -41,14 +41,21 @@ export const Signup: React.FC = () => {
       const { error, needsConfirmation } = await signUp(email, password, name);
       if (error) {
         if (error.message.toLowerCase().includes('rate limit')) {
-          setErrorMsg('Email rate limit exceeded (Supabase free SMTP limit). Please try again shortly or sign in with Demo / Google, or disable email confirmation in your Supabase project settings.');
+          setErrorMsg('Email rate limit exceeded (Supabase limit). Please sign in using Quick Demo Sign-In or Google Sign-In.');
         } else {
           setErrorMsg(error.message);
         }
-      } else if (needsConfirmation) {
-        setConfirmNotice(true);
-      } else {
+      } else if (!needsConfirmation) {
+        // Session created instantly
         navigate('/app/dashboard', { replace: true });
+      } else {
+        // Attempt instant auto-sign-in
+        const loginRes = await signIn(email, password);
+        if (!loginRes.error) {
+          navigate('/app/dashboard', { replace: true });
+        } else {
+          setConfirmNotice(true);
+        }
       }
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to register account.');
