@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Zap, Eye, EyeOff, ArrowRight, AlertCircle, Sparkles, ExternalLink } from 'lucide-react';
+import { Zap, Eye, EyeOff, ArrowRight, AlertCircle, Sparkles, Info } from 'lucide-react';
+
 import { Button } from '../components/ui/Button';
 import { useAuth, GOOGLE_CLIENT_ID } from '../contexts/AuthContext';
 
@@ -33,11 +34,7 @@ export const Login: React.FC = () => {
         try {
           const { error } = await signInWithGoogleToken(response.credential);
           if (error) {
-            if (error.message.includes('provider is not enabled') || error.message.includes('Unsupported provider')) {
-              setErrorMsg('Google OAuth is not toggled ON in your Supabase Dashboard yet. Follow the 2-step guide below or use Quick Demo Sign-In!');
-            } else {
-              setErrorMsg(error.message);
-            }
+            setErrorMsg(error.message);
           } else {
             navigate('/app/dashboard', { replace: true });
           }
@@ -103,12 +100,17 @@ export const Login: React.FC = () => {
     if (window.google?.accounts?.id) {
       window.google.accounts.id.prompt((notification: any) => {
         if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          setErrorMsg('To complete Google Login, please enable the Google Provider toggle in your Supabase Dashboard (Auth > Providers > Google). Or use Quick Demo Sign-In below!');
+          const reason = notification.getNotDisplayedReason ? notification.getNotDisplayedReason() : 'unregistered_origin';
+          if (reason === 'unregistered_origin' || reason === 'opt_out_or_bypass') {
+            setErrorMsg('Google Cloud Error 401: invalid_client (no registered origin). Add https://alpha-x-beige.vercel.app and http://localhost:5173 to Authorized JavaScript origins in Google Cloud Console.');
+          } else {
+            setErrorMsg('Google Sign-In notice: Add https://alpha-x-beige.vercel.app to Authorized JavaScript origins in Google Cloud Console, or use Quick Demo Sign-In below!');
+          }
           setGoogleLoading(false);
         }
       });
     } else {
-      setErrorMsg('To complete Google Login, please enable the Google Provider toggle in your Supabase Dashboard (Auth > Providers > Google).');
+      setErrorMsg('Google Client ID requires registering https://alpha-x-beige.vercel.app in Google Cloud Console > Credentials > Authorized JavaScript origins.');
       setGoogleLoading(false);
     }
   };
@@ -179,14 +181,14 @@ export const Login: React.FC = () => {
       <div
         style={{
           width: '100%',
-          maxWidth: 400,
+          maxWidth: 420,
           background: 'var(--bg-surface)',
           border: '1px solid var(--border)',
           borderRadius: 14,
           padding: 32,
           display: 'flex',
           flexDirection: 'column',
-          gap: 24,
+          gap: 20,
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -218,7 +220,7 @@ export const Login: React.FC = () => {
           </div>
         )}
 
-        {/* Demo Quick Sign In Button */}
+        {/* Quick Demo Sign In */}
         <Button
           variant="outline"
           size="md"
@@ -238,12 +240,12 @@ export const Login: React.FC = () => {
           <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
         </div>
 
-        {/* Google Native Button Mount */}
+        {/* Google Native Button */}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <div ref={googleBtnRef} style={{ minHeight: 40 }} />
         </div>
 
-        {/* Fallback Custom Google Button */}
+        {/* Custom Google Button */}
         <Button
           variant="outline"
           size="md"
@@ -261,7 +263,7 @@ export const Login: React.FC = () => {
           {googleLoading ? 'Connecting Google...' : 'Continue with Google'}
         </Button>
 
-        {/* Supabase Provider Setup Quick Link */}
+        {/* Google Origin Fix Box */}
         <div
           style={{
             padding: '10px 12px',
@@ -274,12 +276,12 @@ export const Login: React.FC = () => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 2 }}>
-            <ExternalLink size={12} />
-            Supabase Setup Guide (30 sec)
+            <Info size={12} color="var(--accent)" />
+            Fix Error 401 (invalid_client):
           </div>
-          In your open Supabase tab: <strong>Auth &gt; Providers &gt; Google</strong>. Toggle <strong>Enabled</strong> and paste Client ID:
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: 'var(--accent)', marginTop: 4, wordBreak: 'break-all' }}>
-            802792167440-1gkep2fea554tadbt3j89dogrh5mtmu7.apps.googleusercontent.com
+          Add your Vercel URL under <strong>Authorized JavaScript origins</strong> in Google Cloud Console:
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: 'var(--accent)', marginTop: 4 }}>
+            https://alpha-x-beige.vercel.app
           </div>
         </div>
 
