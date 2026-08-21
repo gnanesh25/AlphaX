@@ -162,17 +162,29 @@ export const Markets: React.FC = () => {
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Fetching live quote...</div>
               ) : q ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ fontSize: '20px', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace' }}>
-                    {q.close.toFixed(2)}
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                    <span style={{ color: isUp ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
-                      {isUp ? '+' : ''}{q.change.toFixed(2)} ({isUp ? '+' : ''}{q.percent_change.toFixed(2)}%)
-                    </span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      High: {q.high.toFixed(2)} | Low: {q.low.toFixed(2)}
-                    </span>
-                  </div>
+                  {(() => {
+                    const decimals = q.close < 10 ? 4 : 2;
+                    return (
+                      <>
+                        <div style={{ fontSize: '20px', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace' }}>
+                          {q.close.toFixed(decimals)}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', flexWrap: 'wrap', gap: 4 }}>
+                          <span style={{ color: isUp ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+                            {isUp ? '+' : ''}{q.change.toFixed(decimals)} ({isUp ? '+' : ''}{q.percent_change.toFixed(2)}%)
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            H: {q.high.toFixed(decimals)} | L: {q.low.toFixed(decimals)}
+                          </span>
+                        </div>
+                        {q.source && (
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 2 }}>
+                            Feed: {q.source}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               ) : (
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Quote unavailable</div>

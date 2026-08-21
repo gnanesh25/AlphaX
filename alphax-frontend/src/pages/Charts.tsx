@@ -21,6 +21,7 @@ export const Charts: React.FC = () => {
   const [symbol, setSymbol] = useState('XAUUSD');
   const [timeframe, setTimeframe] = useState('15min');
   const [candles, setCandles] = useState<Candle[]>([]);
+  const [dataSource, setDataSource] = useState<string>('Live Data');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +31,7 @@ export const Charts: React.FC = () => {
     try {
       const data = await fetchCandles(sym, tf, 150);
       setCandles(data.candles || []);
+      if (data.source) setDataSource(data.source);
     } catch (err: any) {
       setError(err?.message || 'Failed to connect to market data service.');
     } finally {
@@ -52,11 +54,11 @@ export const Charts: React.FC = () => {
                 Advanced Chart Workspace
               </h2>
               <Badge variant="success">
-                <Database size={10} style={{ marginRight: 3 }} /> Twelve Data Live
+                <Database size={10} style={{ marginRight: 3 }} /> {dataSource}
               </Badge>
             </div>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-              Real-time market charts powered by FastAPI & TradingView Lightweight Charts
+              Real-time multi-asset market charts powered by TradingView Lightweight Charts
             </p>
           </div>
         </div>
