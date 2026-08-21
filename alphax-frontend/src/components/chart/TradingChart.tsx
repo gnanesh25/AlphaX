@@ -526,19 +526,25 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       </div>
 
       {/* Active Indicators Pills Legend Bar */}
-      {indicators.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '4px 16px',
-            background: '#161B22',
-            borderBottom: '1px solid #21262D',
-            overflowX: 'auto',
-          }}
-        >
-          {indicators.map((inst) => {
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '6px 16px',
+          background: '#161B22',
+          borderBottom: '1px solid #21262D',
+          overflowX: 'auto',
+        }}
+      >
+        <span style={{ fontSize: '11px', fontWeight: 600, color: '#7D8590', marginRight: 2 }}>
+          Active Overlays:
+        </span>
+
+        {indicators.length === 0 ? (
+          <span style={{ fontSize: '11px', color: '#484F58' }}>None active</span>
+        ) : (
+          indicators.map((inst) => {
             const def = getIndicatorById(inst.indicatorId);
             if (!def) return null;
             return (
@@ -581,9 +587,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 </button>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
 
       {/* Main Chart Container */}
       <div style={{ position: 'relative', width: '100%' }}>
