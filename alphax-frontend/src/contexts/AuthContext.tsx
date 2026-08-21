@@ -3,6 +3,8 @@ import type { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import type { Profile, UserSettings } from '../lib/supabase';
 
+export const GOOGLE_CLIENT_ID = '802792167440-1gkep2fea554tadbt3j89dogrh5mtmu7.apps.googleusercontent.com';
+
 // ─── Types ────────────────────────────────────────────────────
 
 export interface AuthContextValue {
@@ -22,6 +24,7 @@ export interface AuthContextValue {
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: AuthError | null; needsConfirmation: boolean }>;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signInWithGoogle: () => Promise<{ error: AuthError | null }>;
+  signInWithGoogleToken: (idToken: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Omit<Profile, 'id' | 'created_at' | 'updated_at'>>) => Promise<{ error: Error | null }>;
   updateSettings: (updates: Partial<Omit<UserSettings, 'user_id' | 'updated_at'>>) => Promise<{ error: Error | null }>;
@@ -37,7 +40,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true); // resolves after first onAuthStateChange
+  const [loading, setLoading] = useState(true);
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -56,7 +59,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (profileRes.data) setProfile(profileRes.data as Profile);
       if (settingsRes.data) setSettings(settingsRes.data as UserSettings);
     } catch {
-      // Graceful fallback — profile may not exist yet (trigger hasn't run)
+      // Graceful fallback
     } finally {
       setProfileLoading(false);
     }
@@ -69,7 +72,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ─── Auth state listener ───────────────────────────────────
 
   useEffect(() => {
-    // Get initial session from localStorage (no network call)
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -79,7 +81,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    // Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         setSession(session);
@@ -117,8 +118,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (error) return { error, needsConfirmation: false };
-
-    // If email confirmation required, user.identities will be empty
     const needsConfirmation = !data.session;
     return { error: null, needsConfirmation };
   }, []);
@@ -136,17 +135,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error };
   }, []);
 
-  // ─── Sign In with Google ──────────────────────────────────
+  // ─── Sign In with Google Redirect ─────────────────────────
 
   const signInWithGoogle = useCallback(async (): Promise<{ error: AuthError | null }> => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/app/dashboard`,
+        queryParams: {
+          client_id: GOOGLE_CLIENT_ID,
+        },
       },
     });
     return { error };
   }, []);
+
+  // ─── Sign In with Google ID Token ──────────────────────────
+
+  const signInWithGoogleToken = useCallback(async (idToken: string): Promise<{ error: AuthError | null }> => {
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: idToken,
+    });
+    return { error };
+  }, []);
+
 
   // ─── Sign Out ──────────────────────────────────────────────
 
@@ -205,6 +218,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signUp,
     signIn,
     signInWithGoogle,
+    signInWithGoogleToken,
     signOut,
     updateProfile,
     updateSettings,
