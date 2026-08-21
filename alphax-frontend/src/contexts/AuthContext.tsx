@@ -3,7 +3,7 @@ import type { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import type { Profile, UserSettings } from '../lib/supabase';
 
-export const GOOGLE_CLIENT_ID = '802792167440-1gkep2fea554tadbt3j89dogrh5mtmu7.apps.googleusercontent.com';
+export const GOOGLE_CLIENT_ID = '802792167440-6njbasv9osjt1fautfooasoatkiv4q55.apps.googleusercontent.com';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -106,10 +106,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password: string,
     fullName: string
   ): Promise<{ error: AuthError | null; needsConfirmation: boolean }> => {
+    const redirectUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/app/dashboard`
+      : 'https://alpha-x-beige.vercel.app/app/dashboard';
+
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: {
+        emailRedirectTo: redirectUrl,
         data: {
           full_name: fullName.trim(),
           display_name: fullName.trim().split(' ')[0],

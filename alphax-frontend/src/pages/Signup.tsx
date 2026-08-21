@@ -40,7 +40,11 @@ export const Signup: React.FC = () => {
     try {
       const { error, needsConfirmation } = await signUp(email, password, name);
       if (error) {
-        setErrorMsg(error.message);
+        if (error.message.toLowerCase().includes('rate limit')) {
+          setErrorMsg('Email rate limit exceeded (Supabase free SMTP limit). Please try again shortly or sign in with Demo / Google, or disable email confirmation in your Supabase project settings.');
+        } else {
+          setErrorMsg(error.message);
+        }
       } else if (needsConfirmation) {
         setConfirmNotice(true);
       } else {
